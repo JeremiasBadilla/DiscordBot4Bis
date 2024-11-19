@@ -127,7 +127,7 @@ namespace DiscordBotAPI.Services
                     return new
                     {
                         type = "audio",
-                        audio_url = filename // URL del archivo de audio
+                        audio_url = new { url } // URL del archivo de audio
                     };
                 }
                 else

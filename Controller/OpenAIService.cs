@@ -8,6 +8,8 @@ using iText.Kernel.Pdf.Canvas.Parser;
 using iText.Kernel.Pdf;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using System;
+using System.Net.Mail;
 
 namespace DiscordBotAPI.Services
 {
@@ -42,7 +44,7 @@ namespace DiscordBotAPI.Services
                         };
 
                         // Procesar los adjuntos del mensaje
-                        ProcessMessageAttachments(message, prompt);
+                        await ProcessMessageAttachments(message, prompt);
 
                         // Enviar solicitud a OpenAI
                         var retorno = await SendPromptToOpenAIAsync(prompt);
@@ -63,7 +65,7 @@ namespace DiscordBotAPI.Services
                     };
 
                     // Procesar los adjuntos del mensaje
-                    ProcessMessageAttachments(message, prompt);
+                    await ProcessMessageAttachments(message, prompt);
                     var retorno = await SendPromptToOpenAIAsync(prompt);
                     // Enviar solicitud a OpenAI
                     await message.Channel.SendMessageAsync(retorno);
@@ -80,111 +82,96 @@ namespace DiscordBotAPI.Services
         {
             foreach (var attachment in message.Attachments)
             {
-                if (attachment.ContentType.StartsWith("image/"))
+                try
                 {
-                    // Agregar imagen al prompt como URL
-                    prompt.Add(new
-                    {
-                        type = "image_url",
-                        image_url = new { url = attachment.Url }
-                    });
-                }
-                else if (attachment.ContentType.StartsWith("text/"))
-                {
-                    // Descargar y agregar contenido del archivo de texto al prompt
+                    // Descargar archivo como Stream
                     using var client = new HttpClient();
-                    var textContent = await client.GetStringAsync(attachment.Url);
-                    prompt.Add(new
-                    {
-                        type = "text",
-                        text = textContent
-                    });
-                }
-                else if (attachment.ContentType.Equals("application/json", StringComparison.OrdinalIgnoreCase))
-                {
-                    // Descargar y procesar contenido del archivo JSON
-                    using var client = new HttpClient();
-                    var jsonContent = await client.GetStringAsync(attachment.Url);
+                    var fileStream = await client.GetStreamAsync(attachment.Url);
 
-                    try
-                    {
-                        var parsedJson = JsonConvert.DeserializeObject(jsonContent);
+                    // Procesar archivo basado en contenido detectado
+                    var processedContent = await ProcessFileContent(fileStream, attachment.Filename, attachment.ContentType, attachment.Url);
 
-                        prompt.Add(new
-                        {
-                            type = "json",
-                            json = parsedJson
-                        });
+                    if (processedContent != null)
+                    {
+                        prompt.Add(processedContent);
                     }
-                    catch (JsonException ex)
+                    else
                     {
-                        Console.WriteLine($"[ERROR] Error al procesar JSON: {ex.Message}");
+                        Console.WriteLine($"[INFO] Archivo no procesado: {attachment.Filename}");
                     }
                 }
-                else if (attachment.ContentType.Equals("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", StringComparison.OrdinalIgnoreCase))
+                catch (Exception ex)
                 {
-                    // Descargar y procesar contenido de Excel
-                    using var client = new HttpClient();
-                    var excelStream = await client.GetStreamAsync(attachment.Url);
-
-                    try
-                    {
-                        using var package = new OfficeOpenXml.ExcelPackage(excelStream);
-                        var worksheet = package.Workbook.Worksheets[0];
-                        var rows = new List<string>();
-
-                        for (int row = 1; row <= worksheet.Dimension.Rows; row++)
-                        {
-                            var rowContent = string.Join(", ", Enumerable.Range(1, worksheet.Dimension.Columns).Select(col => worksheet.Cells[row, col].Text));
-                            rows.Add(rowContent);
-                        }
-
-                        prompt.Add(new
-                        {
-                            type = "table",
-                            content = string.Join("\n", rows)
-                        });
-                    }
-                    catch (Exception ex)
-                    {
-                        Console.WriteLine($"[ERROR] Error al procesar Excel: {ex.Message}");
-                    }
-                }
-                //else if (attachment.ContentType.Equals("application/pdf", StringComparison.OrdinalIgnoreCase))
-                //{
-                //    // Descargar y procesar contenido del PDF
-                //    using var client = new HttpClient();
-                //    var pdfStream = await client.GetStreamAsync(attachment.Url);
-
-                //    try
-                //    {
-                //        using var pdfReader = new PdfReader(pdfStream);
-                //        var pdfContent = new StringBuilder();
-
-                //        for (int i = 1; i <= pdfReader.NumberOfPages; i++)
-                //        {
-                //            pdfContent.Append(PdfTextExtractor.GetTextFromPage(pdfReader, i));
-                //        }
-
-                //        prompt.Add(new
-                //        {
-                //            type = "pdf",
-                //            text = pdfContent.ToString()
-                //        });
-                //    }
-                //    catch (Exception ex)
-                //    {
-                //        Console.WriteLine($"[ERROR] Error al procesar PDF: {ex.Message}");
-                //    }
-                //}
-                else
-                {
-                    // Ignorar adjuntos no compatibles
-                    Console.WriteLine($"[INFO] Tipo de archivo no compatible: {attachment.ContentType}");
+                    Console.WriteLine($"[ERROR] Error al procesar archivo: {attachment.Filename}, {ex.Message}");
                 }
             }
-
         }
+
+        private async Task<object?> ProcessFileContent(Stream fileStream, string filename, string contentType, string url)
+        {
+            try
+            {
+                // Categorización básica según contentType
+                if (contentType.StartsWith("image/"))
+                {
+                    // Tratar como imagen
+                    return new
+                    {
+                        type = "image_url",
+                        image_url = new { url } // O directamente usar la URL si está disponible
+                    };
+                }
+                else if (contentType.StartsWith("audio/"))
+                {
+                    // Tratar como audio
+                    return new
+                    {
+                        type = "audio",
+                        audio_url = filename // URL del archivo de audio
+                    };
+                }
+                else
+                {
+                    // Todo lo demás: procesar como texto genérico desde el stream
+                    using var reader = new StreamReader(fileStream);
+                    var content = await reader.ReadToEndAsync();
+                    return new
+                    {
+                        type = "text",
+                        text = content
+                    };
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[ERROR] Error procesando archivo {filename}: {ex.Message}");
+                throw;
+            }
+        }
+
+
+        // Procesar Excel (ya usado antes)
+        private async Task<object?> ProcessExcelFile(Stream excelStream)
+        {
+            using var package = new OfficeOpenXml.ExcelPackage(excelStream);
+            var worksheet = package.Workbook.Worksheets[0];
+            var rows = new List<string>();
+
+            for (int row = 1; row <= worksheet.Dimension.Rows; row++)
+            {
+                var rowContent = string.Join(", ", Enumerable.Range(1, worksheet.Dimension.Columns).Select(col => worksheet.Cells[row, col].Text));
+                rows.Add(rowContent);
+            }
+
+            return new
+            {
+                type = "table",
+                content = string.Join("\n", rows)
+            };
+        }
+
+
+
 
         private async Task<string> SendPromptToOpenAIAsync(List<object> prompt)
         {
@@ -195,7 +182,7 @@ namespace DiscordBotAPI.Services
                 // Crear el cuerpo de la solicitud
                 var requestBody = new
                 {
-                    model = "gpt-4o-mini",
+                    model = "gpt-4o",
                     messages = new[]
                     {
                         new { role = "user", content = prompt }

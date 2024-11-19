@@ -15,8 +15,8 @@ builder.Host.UseSerilog(); // Reemplaza el sistema de logging predeterminado
 
 // Agregar servicios al contenedor
 builder.Services.AddControllers();
-builder.Services.AddSingleton<DiscordBotService>();
-builder.Services.AddSingleton<OpenAIService>();
+builder.Services.AddScoped<DiscordBotService>();
+builder.Services.AddScoped<OpenAIService>();
 
 // Registrar Swagger
 builder.Services.AddSwaggerGen(c =>

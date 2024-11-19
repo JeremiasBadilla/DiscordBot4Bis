@@ -1,5 +1,8 @@
 ﻿using Discord.WebSocket;
 using Discord;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
 
 namespace DiscordBotAPI.Services
 {
@@ -47,15 +50,31 @@ namespace DiscordBotAPI.Services
             if (message.Author.IsBot)
                 return;
 
-            ulong channelId = message.Channel.Id;
-            if (!conversationHistory.ContainsKey(channelId))
+            if (message.Channel is IDMChannel)
             {
-                conversationHistory[channelId] = new List<string>();
+                // Mensajes en DM
+                Console.WriteLine($"[DM] Mensaje recibido de {message.Author.Username}: {message.Content}");
+                await _openAIService.AnswerQuestionAsync(message, "DM", message.Content);
             }
-
-            if (message.Content.StartsWith("!"))
+            else if (message.Channel is ITextChannel textChannel)
             {
-                await ProcessCommandAsync(message);
+                // Mensajes en text-channels
+                Console.WriteLine($"[Text-Channel] Mensaje recibido en {textChannel.Name} de {message.Author.Username}: {message.Content}");
+
+                ulong channelId = message.Channel.Id;
+                if (!conversationHistory.ContainsKey(channelId))
+                {
+                    conversationHistory[channelId] = new List<string>();
+                }
+
+                if (message.Content.StartsWith("!"))
+                {
+                    await ProcessCommandAsync(message);
+                }
+                else
+                {
+                    await _openAIService.AnswerQuestionAsync(message, textChannel.Name, message.Content);
+                }
             }
         }
 
@@ -85,7 +104,7 @@ namespace DiscordBotAPI.Services
                 case "ayuda":
                     await SendHelpMessageAsync(message);
                     break;
-                default:                   
+                default:
                     await _openAIService.AnswerQuestionAsync(message, null, command);
                     break;
             }

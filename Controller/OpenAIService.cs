@@ -59,7 +59,7 @@ namespace DiscordBotAPI.Services
                     // Manejo de mensajes fuera de servidores
                     var prompt = new List<object>
                     {
-                        new { type = "text", text = $"pregunta" }
+                        new { type = "text", text = pregunta }
                     };
 
                     // Procesar los adjuntos del mensaje

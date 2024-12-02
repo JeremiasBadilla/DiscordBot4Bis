@@ -8,6 +8,8 @@
     <PublishAot>true</PublishAot>
     <DockerDefaultTargetOS>Linux</DockerDefaultTargetOS>
     <DockerfileContext>.</DockerfileContext>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <DocumentationFile>bin\Debug\net8.0\DiscordBot4Bis.xml</DocumentationFile>
   </PropertyGroup>
 
   <ItemGroup>

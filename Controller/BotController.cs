@@ -14,7 +14,7 @@ namespace DiscordBotAPI.Controllers
             _discordBotService = discordBotService;
         }
 
-        [HttpPost("start-bot")]
+        [HttpPost("start")]
         public async Task<IActionResult> StartBot()
         {
             try
